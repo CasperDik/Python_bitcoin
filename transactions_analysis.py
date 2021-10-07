@@ -40,6 +40,6 @@ def delete_exchange_transactions(transactions):
     for exchange_adress in lines:
         transactions = transactions[transactions["output_key"] != exchange_adress]
         transactions = transactions[transactions["input_key"] != exchange_adress]
-
+    print(len(transactions))
     return transactions
 delete_exchange_transactions(transactions)
