@@ -42,4 +42,3 @@ def delete_exchange_transactions(transactions):
         transactions = transactions[transactions["input_key"] != exchange_adress]
     print(len(transactions))
     return transactions
-delete_exchange_transactions(transactions)
