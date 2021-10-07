@@ -2,15 +2,17 @@ import pandas as pd
 from sys import getsizeof
 from google.cloud import bigquery
 from bq_helper import BigQueryHelper
-
 # pip install --upgrade google-cloud-bigquery
 # pip install -e git+https://github.com/SohierDane/BigQuery_Helper#egg=bq_helper
 
+# set google credentials
 import os
 os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = "apikey.json"
 
-bq_assist = BigQueryHelper('bigquery-public-data', 'bitcoin_blockchain')
+# get bitcoin date between 2 timestamps
+bq_assist = BigQueryHelper('bigquery-public-data', 'crypto_bitcoin')
 
+# query
 QUERY_TEMPLATE = """
 SELECT
     timestamp,
@@ -20,41 +22,26 @@ SELECT
 FROM `bigquery-public-data.bitcoin_blockchain.transactions`
     JOIN UNNEST (inputs) AS inputs
     JOIN UNNEST (outputs) AS outputs
-WHERE inputs.input_pubkey_base58 IN UNNEST({0})
-    AND outputs.output_satoshis  >= {1}
+WHERE timestamp BETWEEN {0} AND {1}
+    AND outputs.output_satoshis  >= {2}
     AND inputs.input_pubkey_base58 IS NOT NULL
     AND outputs.output_pubkey_base58 IS NOT NULL
 GROUP BY timestamp, input_key, output_key, satoshis
 """
 
-def trace_transactions(target_depth, seeds, min_satoshi_per_transaction, bq_assist):
-    """
-    Trace transactions associated with a given bitcoin key.
+# set begin and end date for query
+begin_date = int(pd.Timestamp(year=2019, month=11, day=1, hour = 10, second = 49, tz = 'US/Central').timestamp())
+days = 1
+end_date = begin_date + 60*60*24*days
 
-    To limit the number of BigQuery calls, this function ignores time.
-    If you care about the order of transactions, you'll need to do post-processing.
+# set minimum transaction amount
+min_satoshi_per_transaction = 0
 
-    May return a deeper graph than the `target_depth` if there are repeated transactions
-    from wallet a to b or or self transactions (a -> a).
-    """
-    MAX_SEEDS_PER_QUERY = 500
-    query = QUERY_TEMPLATE.format(seeds, min_satoshi_per_transaction)
-    print(f'Estimated total query size: {int(bq_assist.estimate_query_size(query)) * MAX_DEPTH}')
-    results = []
-    seeds_scanned = set()
-    for i in range(target_depth):
-        seeds = seeds[:MAX_SEEDS_PER_QUERY]
-        print(f"Now scanning {len(seeds)} seeds")
-        query = QUERY_TEMPLATE.format(seeds, min_satoshi_per_transaction)
-        transactions = bq_assist.query_to_pandas(query)
-        results.append(transactions)
-        # limit query kb by dropping any duplicated seeds
-        seeds_scanned.update(seeds)
-        seeds = list(set(transactions.output_key.unique()).difference(seeds_scanned))
-    return pd.concat(results).drop_duplicates()
+# format query
+query = QUERY_TEMPLATE.format(begin_date, end_date, min_satoshi_per_transaction)
+# run query
+transactions = bq_assist.query_to_pandas(query)
 
-MAX_DEPTH = 4
-BASE_SEEDS = ['1XPTgDRhN8RFnzniWCddobD9iKZatrvH4']
-df = trace_transactions(MAX_DEPTH, BASE_SEEDS, 0, bq_assist)
+# export to dataframe
+transactions.to_csv("transactions_bitcoin.csv", index=False)
 
-df.to_csv("transactions.csv", index=False)
